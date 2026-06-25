@@ -1,14 +1,24 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { supabase } from '../lib/supabase'
+import {
+  collection,
+  query,
+  where,
+  orderBy,
+  getDocs,
+  addDoc,
+  deleteDoc,
+  doc,
+  serverTimestamp,
+} from 'firebase/firestore'
+import { db } from '../lib/firebase'
 import { useAuth } from '../contexts/AuthContext'
 
-// Tipo de la tabla de ejemplo `items` (ver supabase/schema.sql).
+// Documento de la colección de ejemplo `items` en Firestore.
 // Sirve como prueba de que el guardado de datos por usuario funciona.
 // Cuando definamos qué hace la app lo sustituimos por el modelo real.
 interface Item {
   id: string
   title: string
-  created_at: string
 }
 
 export default function Dashboard() {
@@ -19,46 +29,60 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null)
 
   async function loadItems() {
+    if (!user) return
     setLoading(true)
-    const { data, error } = await supabase
-      .from('items')
-      .select('id, title, created_at')
-      .order('created_at', { ascending: false })
-    if (error) setError(error.message)
-    else setItems(data ?? [])
-    setLoading(false)
+    try {
+      const q = query(
+        collection(db, 'items'),
+        where('userId', '==', user.uid),
+        orderBy('createdAt', 'desc'),
+      )
+      const snap = await getDocs(q)
+      setItems(snap.docs.map((d) => ({ id: d.id, title: d.data().title as string })))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudieron cargar los datos.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
     loadItems()
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user])
 
   async function addItem(e: FormEvent) {
     e.preventDefault()
     if (!title.trim() || !user) return
     setError(null)
-    const { error } = await supabase
-      .from('items')
-      .insert({ title: title.trim(), user_id: user.id })
-    if (error) setError(error.message)
-    else {
+    try {
+      await addDoc(collection(db, 'items'), {
+        title: title.trim(),
+        userId: user.uid,
+        createdAt: serverTimestamp(),
+      })
       setTitle('')
       loadItems()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo guardar.')
     }
   }
 
   async function removeItem(id: string) {
     setError(null)
-    const { error } = await supabase.from('items').delete().eq('id', id)
-    if (error) setError(error.message)
-    else loadItems()
+    try {
+      await deleteDoc(doc(db, 'items', id))
+      loadItems()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo eliminar.')
+    }
   }
 
   return (
     <div className="mx-auto max-w-2xl">
       <h1 className="text-2xl font-bold sm:text-3xl">Inicio</h1>
       <p className="mt-1 text-slate-400">
-        Prueba de guardado en Supabase. Lo que crees aquí se asocia a tu cuenta.
+        Prueba de guardado en Firestore. Lo que crees aquí se asocia a tu cuenta.
       </p>
 
       <form onSubmit={addItem} className="mt-6 flex gap-2">

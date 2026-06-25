@@ -7,7 +7,7 @@ import Dashboard from './pages/Dashboard'
 import Account from './pages/Account'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { session, loading } = useAuth()
+  const { user, loading } = useAuth()
 
   if (loading) {
     return (
@@ -17,20 +17,20 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     )
   }
 
-  if (!session) return <Navigate to="/login" replace />
+  if (!user) return <Navigate to="/login" replace />
 
   return <Layout>{children}</Layout>
 }
 
 export default function App() {
-  const { session } = useAuth()
+  const { user } = useAuth()
 
   return (
     <Routes>
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route
         path="/login"
-        element={session ? <Navigate to="/" replace /> : <Login />}
+        element={user ? <Navigate to="/" replace /> : <Login />}
       />
       <Route
         path="/"

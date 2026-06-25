@@ -1,0 +1,22 @@
+rules_version = '2';
+
+// Reglas de seguridad de Firestore para Split App.
+// Cada usuario solo puede leer y escribir SUS propios documentos.
+// Publícalas en: Firebase Console -> Firestore Database -> Rules
+// (o con la CLI: firebase deploy --only firestore:rules)
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Colección de ejemplo. Cuando definamos el modelo real de la app,
+    // añadiremos más reglas por colección siguiendo este patrón.
+    match /items/{itemId} {
+      allow read, delete: if request.auth != null
+        && resource.data.userId == request.auth.uid;
+      allow create: if request.auth != null
+        && request.resource.data.userId == request.auth.uid;
+      allow update: if request.auth != null
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == request.auth.uid;
+    }
+  }
+}

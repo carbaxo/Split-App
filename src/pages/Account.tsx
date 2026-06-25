@@ -14,7 +14,7 @@ export default function Account() {
         </div>
         <div>
           <p className="text-xs uppercase tracking-wide text-slate-500">ID de usuario</p>
-          <p className="mt-1 break-all font-mono text-sm text-slate-400">{user?.id}</p>
+          <p className="mt-1 break-all font-mono text-sm text-slate-400">{user?.uid}</p>
         </div>
         <button
           onClick={signOut}

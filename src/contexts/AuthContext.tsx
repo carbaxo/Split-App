@@ -6,62 +6,91 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import type { Session, User } from '@supabase/supabase-js'
-import { supabase } from '../lib/supabase'
+import {
+  onAuthStateChanged,
+  sendSignInLinkToEmail,
+  isSignInWithEmailLink,
+  signInWithEmailLink,
+  signOut as fbSignOut,
+  type User,
+} from 'firebase/auth'
+import { auth } from '../lib/firebase'
+
+const EMAIL_STORAGE_KEY = 'split-app:emailForSignIn'
 
 interface AuthContextValue {
-  session: Session | null
   user: User | null
   loading: boolean
   signInWithEmail: (email: string) => Promise<{ error: string | null }>
+  completeSignInFromLink: (href: string) => Promise<{ error: string | null }>
+  isEmailLink: (href: string) => boolean
   signOut: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null)
+  const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Recupera la sesión existente (si ya habías entrado antes).
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session)
+    // Escucha login / logout / refresco de token.
+    const unsubscribe = onAuthStateChanged(auth, (newUser) => {
+      setUser(newUser)
       setLoading(false)
     })
-
-    // Escucha cambios: login por magic link, logout, refresco de token...
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession)
-    })
-
-    return () => listener.subscription.unsubscribe()
+    return unsubscribe
   }, [])
 
   async function signInWithEmail(email: string) {
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
+    try {
+      await sendSignInLinkToEmail(auth, email, {
         // A dónde vuelve el usuario tras hacer clic en el enlace del correo.
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
-    })
-    return { error: error?.message ?? null }
+        url: `${window.location.origin}/auth/callback`,
+        handleCodeInApp: true,
+      })
+      // Guardamos el correo para completar el login al volver (sin re-pedirlo).
+      window.localStorage.setItem(EMAIL_STORAGE_KEY, email)
+      return { error: null }
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : 'No se pudo enviar el enlace.' }
+    }
+  }
+
+  function isEmailLink(href: string) {
+    return isSignInWithEmailLink(auth, href)
+  }
+
+  async function completeSignInFromLink(href: string) {
+    try {
+      let email = window.localStorage.getItem(EMAIL_STORAGE_KEY)
+      // Si abre el enlace en otro dispositivo/navegador, pedimos el correo.
+      if (!email) {
+        email = window.prompt('Confirma tu correo electrónico para entrar:') ?? ''
+      }
+      if (!email) return { error: 'Se necesita el correo para completar el acceso.' }
+      await signInWithEmailLink(auth, email, href)
+      window.localStorage.removeItem(EMAIL_STORAGE_KEY)
+      return { error: null }
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : 'El enlace no es válido o ha caducado.' }
+    }
   }
 
   async function signOut() {
-    await supabase.auth.signOut()
+    await fbSignOut(auth)
   }
 
   const value = useMemo<AuthContextValue>(
     () => ({
-      session,
-      user: session?.user ?? null,
+      user,
       loading,
       signInWithEmail,
+      completeSignInFromLink,
+      isEmailLink,
       signOut,
     }),
-    [session, loading],
+    [user, loading],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -1,53 +1,55 @@
 # Split App
 
-App web instalable (PWA) con autenticación por **magic link** y datos en **Supabase**.
-Funciona en **móvil y desktop** desde una sola base de código, y en Android se puede
-**instalar como app**.
+App web instalable (PWA) con autenticación por **enlace de correo** y datos en
+**Firebase**. Funciona en **móvil y desktop** desde una sola base de código, y en
+Android se puede **instalar como app**.
 
 ## Stack
 
 - **Vite + React + TypeScript** — base de código única, responsive.
-- **Supabase** — base de datos Postgres + autenticación (enlace mágico por correo).
+- **Firebase Authentication** — login por enlace de correo (email link / passwordless).
+- **Cloud Firestore** — base de datos en la nube, con reglas de seguridad por usuario.
 - **vite-plugin-pwa** — manifest + service worker → instalable en Android.
 - **Tailwind CSS v4** — diseño adaptable móvil/desktop.
 
 ## Cómo funciona la autenticación
 
 1. El usuario introduce su correo en la pantalla de login.
-2. Supabase le envía un **enlace mágico**.
-3. Al hacer clic, vuelve a `/auth/callback`, la app crea la sesión y entra.
-4. La sesión se guarda en el dispositivo (`localStorage`) y se refresca sola.
-5. Todo lo que cree el usuario se guarda en Supabase asociado a su `user_id`,
-   protegido con **Row Level Security** (cada usuario solo ve sus datos).
+2. Firebase le envía un **enlace de acceso** por correo.
+3. Al hacer clic, vuelve a `/auth/callback`, la app completa el login y entra.
+4. La sesión se guarda en el dispositivo y se mantiene al volver a abrir la app.
+5. Todo lo que cree el usuario se guarda en Firestore asociado a su `uid`,
+   protegido con **reglas de seguridad** (cada usuario solo ve sus datos).
 
 ---
 
 ## Puesta en marcha
 
-### 1. Crear el proyecto en Supabase
+### 1. Crear el proyecto en Firebase
 
-1. Entra en <https://supabase.com> y crea un proyecto.
-2. Ve a **Project Settings → API** y copia:
-   - **Project URL**
-   - **anon public key**
+1. Entra en <https://console.firebase.google.com> y crea un proyecto.
+2. Dentro del proyecto, crea una **app web** (icono `</>`).
+3. Copia el objeto de configuración (`apiKey`, `authDomain`, `projectId`, etc.).
 
-### 2. Configurar la base de datos
+### 2. Activar la autenticación por enlace de correo
 
-En el **SQL Editor** de Supabase, pega y ejecuta el contenido de
-[`supabase/schema.sql`](supabase/schema.sql). Crea la tabla de ejemplo `items`
-con sus políticas de seguridad.
+En Firebase Console → **Authentication → Sign-in method**:
 
-### 3. Configurar el correo de autenticación
+- Activa el proveedor **Email/Password** y, dentro, marca también
+  **Email link (passwordless sign-in)**.
 
-En Supabase → **Authentication → URL Configuration**:
+En **Authentication → Settings → Authorized domains**, asegúrate de que están
+`localhost` y tu dominio de producción.
 
-- **Site URL**: la URL de tu app (en local: `http://localhost:5173`).
-- **Redirect URLs**: añade `http://localhost:5173/auth/callback` y la URL de
-  producción cuando despliegues (`https://tu-dominio/auth/callback`).
+### 3. Crear la base de datos Firestore
 
-> El correo de magic link usa por defecto el servidor de pruebas de Supabase
-> (suficiente para empezar). Para producción conviene configurar un SMTP propio
-> en **Authentication → Emails**.
+En Firebase Console → **Firestore Database → Create database**.
+
+- Publica las reglas de seguridad de [`firestore.rules`](firestore.rules)
+  (cópialas en la pestaña **Rules**, o usa la CLI — ver más abajo).
+- Crea el índice compuesto de [`firestore.indexes.json`](firestore.indexes.json).
+  La primera vez que ejecutes la consulta, la consola te dará un enlace directo
+  para crearlo con un clic.
 
 ### 4. Variables de entorno
 
@@ -58,8 +60,12 @@ cp .env.example .env
 Rellena `.env` con los valores del paso 1:
 
 ```
-VITE_SUPABASE_URL=https://TU-PROYECTO.supabase.co
-VITE_SUPABASE_ANON_KEY=tu-anon-public-key
+VITE_FIREBASE_API_KEY=...
+VITE_FIREBASE_AUTH_DOMAIN=tu-proyecto.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=tu-proyecto
+VITE_FIREBASE_STORAGE_BUCKET=tu-proyecto.appspot.com
+VITE_FIREBASE_MESSAGING_SENDER_ID=...
+VITE_FIREBASE_APP_ID=...
 ```
 
 ### 5. Arrancar en local
@@ -88,7 +94,7 @@ Abre <http://localhost:5173>, introduce tu correo y entra con el enlace que reci
 
 ## Instalar como app en Android
 
-1. Despliega la app en una URL **HTTPS** (Vercel, Netlify, etc.).
+1. Despliega la app en una URL **HTTPS**.
 2. Ábrela en **Chrome** en Android.
 3. Menú (⋮) → **Instalar aplicación** / **Añadir a pantalla de inicio**.
 4. Se instala con icono propio y se abre a pantalla completa (modo `standalone`).
@@ -100,13 +106,25 @@ Abre <http://localhost:5173>, introduce tu correo y entra con el enlace que reci
 
 ## Despliegue
 
-El proyecto es un sitio estático (SPA). Incluye configuración de _fallback_ de
-rutas para **Vercel** (`vercel.json`) y **Netlify** (`public/_redirects`).
+El proyecto es un sitio estático (SPA). Hay configuración de _fallback_ de rutas
+para **Firebase Hosting** (`firebase.json`), **Vercel** (`vercel.json`) y
+**Netlify** (`public/_redirects`).
 
-1. Conecta el repo a Vercel/Netlify.
-2. Build command: `npm run build` · Output: `dist`.
-3. Añade las variables `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`.
-4. Añade la URL de producción a las **Redirect URLs** de Supabase (paso 3).
+### Opción A — Firebase Hosting (con la CLI)
+
+```bash
+npm install -g firebase-tools
+firebase login
+firebase use --add                       # selecciona tu proyecto
+npm run build
+firebase deploy --only hosting,firestore # despliega app + reglas + índices
+```
+
+### Opción B — Vercel / Netlify
+
+1. Conecta el repo. Build command: `npm run build` · Output: `dist`.
+2. Añade las variables `VITE_FIREBASE_*` en el panel del proveedor.
+3. Añade el dominio de producción a los **Authorized domains** de Firebase Auth.
 
 ---
 
@@ -114,22 +132,24 @@ rutas para **Vercel** (`vercel.json`) y **Netlify** (`public/_redirects`).
 
 ```
 src/
-  lib/supabase.ts          Cliente de Supabase
-  contexts/AuthContext.tsx Estado de sesión + login/logout
+  lib/firebase.ts          Inicialización de Firebase (auth + Firestore)
+  contexts/AuthContext.tsx Estado de sesión + login/logout por enlace de correo
   components/
-    Login.tsx              Pantalla de magic link
+    Login.tsx              Pantalla de acceso por correo
     Layout.tsx             Navegación responsive (sidebar desktop / bottom-nav móvil)
   pages/
-    AuthCallback.tsx       Vuelta del enlace del correo
-    Dashboard.tsx          Demo de guardado de datos en Supabase
+    AuthCallback.tsx       Completa el login desde el enlace del correo
+    Dashboard.tsx          Demo de guardado de datos en Firestore
     Account.tsx            Datos de la cuenta
   App.tsx                  Rutas + protección de rutas
-supabase/schema.sql        Tablas + Row Level Security
+firestore.rules            Reglas de seguridad por usuario
+firestore.indexes.json     Índices compuestos
+firebase.json              Config de Firebase Hosting + Firestore
 scripts/generate-icons.mjs Generador de iconos PWA
 ```
 
 ## Próximos pasos
 
 El framework está listo. Falta definir **qué hace la app** (modelo de datos:
-grupos, gastos, repartos…) para sustituir la tabla de ejemplo `items` por el
+grupos, gastos, repartos…) para sustituir la colección de ejemplo `items` por el
 modelo real.
