@@ -2,11 +2,23 @@ import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useUsers, useEnsureUsers } from '../contexts/UsersContext'
-import { useGroup, useExpenses, leaveGroup, renameGroup, removeMember } from '../data/firestore'
+import {
+  useGroup,
+  useExpenses,
+  leaveGroup,
+  renameGroup,
+  removeMember,
+  addLocalMember,
+  removeLocalMember,
+  addMemberByEmail,
+} from '../data/firestore'
 import { computeNetBalances, simplifyDebts } from '../lib/balances'
+import { buildLocalNames } from '../lib/members'
 import { formatMoney, formatDate } from '../lib/format'
 import { getCategory, getGroupType } from '../lib/categories'
 import type { Expense } from '../lib/types'
+import { pick, EMPTY_EXPENSES, ALL_SETTLED_GROUP } from '../lib/funny'
+import { Avatar } from '../components/Avatar'
 import { SubHeader } from './CreateGroup'
 import { PlusIcon, ShareIcon, CheckIcon, TrashIcon } from '../components/Icons'
 
@@ -73,8 +85,12 @@ export default function GroupDetail() {
         ))}
       </div>
 
-      {tab === 'expenses' && <ExpensesTab groupId={group.id} uid={uid} expenses={expenses} currency={group.currency} />}
-      {tab === 'balances' && <BalancesTab groupId={group.id} uid={uid} expenses={expenses} currency={group.currency} />}
+      {tab === 'expenses' && (
+        <ExpensesTab groupId={group.id} uid={uid} expenses={expenses} currency={group.currency} localNames={buildLocalNames([group])} />
+      )}
+      {tab === 'balances' && (
+        <BalancesTab groupId={group.id} uid={uid} expenses={expenses} currency={group.currency} localNames={buildLocalNames([group])} />
+      )}
       {tab === 'members' && <MembersTab group={group} uid={uid} />}
 
       {/* FAB añadir gasto */}
@@ -96,21 +112,24 @@ function ExpensesTab({
   uid,
   expenses,
   currency,
+  localNames,
 }: {
   groupId: string
   uid: string
   expenses: Expense[] | null
   currency: string
+  localNames: Record<string, string>
 }) {
-  const { name } = useUsers()
+  const { name: userName } = useUsers()
+  const name = (id: string) => localNames[id] ?? userName(id)
   const navigate = useNavigate()
 
   if (!expenses) return <p className="p-6 text-gray-400">Cargando…</p>
   if (expenses.length === 0)
     return (
       <div className="p-8 text-center text-gray-500">
-        <p>Todavía no hay gastos.</p>
-        <p className="mt-1 text-sm text-gray-400">Pulsa “Añadir gasto” para empezar.</p>
+        <p>{pick(EMPTY_EXPENSES, groupId)}</p>
+        <p className="mt-1 text-sm text-gray-400">Dale a “Añadir gasto” y que empiece el sablazo.</p>
       </div>
     )
 
@@ -177,13 +196,16 @@ function BalancesTab({
   uid,
   expenses,
   currency,
+  localNames,
 }: {
   groupId: string
   uid: string
   expenses: Expense[] | null
   currency: string
+  localNames: Record<string, string>
 }) {
-  const { name } = useUsers()
+  const { name: userName } = useUsers()
+  const name = (id: string) => localNames[id] ?? userName(id)
   const debts = useMemo(() => (expenses ? simplifyDebts(computeNetBalances(expenses)) : []), [expenses])
 
   if (!expenses) return <p className="p-6 text-gray-400">Cargando…</p>
@@ -192,8 +214,8 @@ function BalancesTab({
     <div className="px-4 py-4 pb-28 sm:px-8">
       {debts.length === 0 ? (
         <div className="rounded-2xl bg-brand-50 p-6 text-center text-brand-700">
-          <p className="text-lg font-semibold">¡Todo saldado! 🎉</p>
-          <p className="mt-1 text-sm">Nadie debe nada en este grupo.</p>
+          <p className="text-lg font-semibold">{pick(ALL_SETTLED_GROUP, groupId)}</p>
+          <p className="mt-1 text-sm">Nadie debe nada. Por ahora.</p>
         </div>
       ) : (
         <ul className="space-y-2.5">
@@ -236,9 +258,22 @@ function MembersTab({ group, uid }: { group: import('../lib/types').Group; uid: 
   const { name, get } = useUsers()
   const navigate = useNavigate()
   const [copied, setCopied] = useState(false)
+  const [copiedCode, setCopiedCode] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
   const isOwner = group.createdBy === uid
+  const locals = group.localMembers ?? []
 
   const inviteLink = `${window.location.origin}${import.meta.env.BASE_URL}#/join/${group.id}`
+
+  async function copyCode() {
+    try {
+      await navigator.clipboard.writeText(group.id)
+      setCopiedCode(true)
+      setTimeout(() => setCopiedCode(false), 2000)
+    } catch {
+      /* nada */
+    }
+  }
 
   async function share() {
     const text = `Únete a mi grupo "${group.name}" en Split App: ${inviteLink}`
@@ -252,6 +287,27 @@ function MembersTab({ group, uid }: { group: import('../lib/types').Group; uid: 
     } catch {
       /* cancelado */
     }
+  }
+
+  async function addPerson() {
+    const personName = window.prompt('Nombre de la persona (sin cuenta):')
+    if (personName && personName.trim()) {
+      await addLocalMember(group.id, personName.trim())
+    }
+  }
+
+  async function addByEmail() {
+    const email = window.prompt('Correo de la persona (debe tener cuenta en Split App):')
+    if (!email || !email.trim()) return
+    const res = await addMemberByEmail(group.id, email, group.memberIds)
+    setMsg(
+      res === 'added'
+        ? '¡Añadido! 🎉'
+        : res === 'already'
+          ? 'Esa persona ya está en el grupo.'
+          : 'No hay ninguna cuenta con ese correo. Dile que entre una vez, o añádela como “persona sin cuenta”.',
+    )
+    setTimeout(() => setMsg(null), 4000)
   }
 
   async function rename() {
@@ -268,25 +324,62 @@ function MembersTab({ group, uid }: { group: import('../lib/types').Group; uid: 
 
   return (
     <div className="px-4 py-4 pb-28 sm:px-8">
-      <button
-        onClick={share}
-        className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 px-4 py-3 font-semibold text-white transition hover:bg-brand-600"
-      >
-        <ShareIcon className="h-5 w-5" />
-        {copied ? '¡Enlace copiado!' : 'Invitar a alguien'}
-      </button>
+      <div className="mb-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <button
+          onClick={share}
+          className="flex items-center justify-center gap-2 rounded-xl bg-brand-500 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-600"
+        >
+          <ShareIcon className="h-5 w-5" />
+          {copied ? '¡Copiado!' : 'Invitar por enlace'}
+        </button>
+        <button
+          onClick={addPerson}
+          className="flex items-center justify-center gap-2 rounded-xl border border-gray-300 px-3 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+        >
+          <PlusIcon className="h-5 w-5" />
+          Añadir persona
+        </button>
+        <button
+          onClick={addByEmail}
+          className="flex items-center justify-center gap-2 rounded-xl border border-gray-300 px-3 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+        >
+          <PlusIcon className="h-5 w-5" />
+          Añadir por correo
+        </button>
+      </div>
+      {msg && <p className="mb-3 text-center text-sm text-gray-600">{msg}</p>}
+
+      {/* Código y enlace del grupo, visibles para compartir */}
+      <div className="mb-3 rounded-xl border border-gray-200 bg-gray-50 p-3">
+        <p className="text-xs font-medium text-gray-500">Código del grupo</p>
+        <div className="mt-1 flex items-center gap-2">
+          <code className="flex-1 truncate rounded border border-gray-200 bg-white px-2 py-1.5 font-mono text-sm text-gray-700">
+            {group.id}
+          </code>
+          <button
+            onClick={copyCode}
+            className="shrink-0 rounded-lg bg-brand-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-600"
+          >
+            {copiedCode ? '¡Copiado!' : 'Copiar'}
+          </button>
+        </div>
+        <p className="mt-2 text-xs text-gray-400">
+          Tu amigo puede pegar este código en <b>“Unirme con código”</b>, o abrir este enlace:
+        </p>
+        <p className="mt-1 break-all text-xs text-brand-700">{inviteLink}</p>
+      </div>
+
       <p className="mb-4 text-center text-xs text-gray-400">
-        Comparte el enlace. Quien lo abra y entre con su cuenta se unirá al grupo.
+        “Persona” = alguien sin la app (lo gestionas tú). “Por correo/enlace” = cuenta real.
       </p>
 
       <ul className="space-y-2">
+        {/* Usuarios reales */}
         {group.memberIds.map((m) => {
           const p = get(m)
           return (
             <li key={m} className="flex items-center gap-3 rounded-xl border border-gray-100 bg-white p-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-100 font-bold text-brand-700">
-                {(p?.name ?? '?').charAt(0).toUpperCase()}
-              </span>
+              <Avatar emoji={p?.emoji} name={p?.name} className="h-10 w-10 text-lg" />
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium text-gray-800">
                   {m === uid ? 'Tú' : name(m)}
@@ -306,6 +399,23 @@ function MembersTab({ group, uid }: { group: import('../lib/types').Group; uid: 
             </li>
           )
         })}
+        {/* Personas sin cuenta */}
+        {locals.map((l) => (
+          <li key={l.id} className="flex items-center gap-3 rounded-xl border border-gray-100 bg-white p-3">
+            <Avatar name={l.name} className="h-10 w-10 text-lg bg-gray-200 text-gray-500" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium text-gray-800">{l.name}</p>
+              <p className="text-xs text-gray-400">sin cuenta</p>
+            </div>
+            <button
+              onClick={() => removeLocalMember(group.id, locals, l.id)}
+              className="rounded-lg p-2 text-gray-400 hover:bg-rose-50 hover:text-rose-500"
+              title="Quitar del grupo"
+            >
+              <TrashIcon className="h-5 w-5" />
+            </button>
+          </li>
+        ))}
       </ul>
 
       <div className="mt-6 space-y-2">

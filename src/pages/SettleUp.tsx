@@ -5,6 +5,7 @@ import { useUsers, useEnsureUsers } from '../contexts/UsersContext'
 import { useGroup, useExpenses, addExpense } from '../data/firestore'
 import { computeNetBalances, simplifyDebts } from '../lib/balances'
 import { formatMoney, round2 } from '../lib/format'
+import { allMemberIds, buildLocalNames } from '../lib/members'
 import { SubHeader } from './CreateGroup'
 
 function parseAmount(s: string): number {
@@ -37,7 +38,9 @@ export default function SettleUp() {
   if (group === undefined) return <div className="p-8 text-gray-400">Cargando…</div>
   if (!group) return <div className="p-8 text-gray-500">Grupo no encontrado.</div>
 
-  const members = group.memberIds
+  const members = allMemberIds(group)
+  const localNames = buildLocalNames([group])
+  const displayName = (id: string) => (id === uid ? 'Tú' : localNames[id] ?? name(id))
   const amount = parseAmount(amountStr)
 
   function applySuggestion(d: { from: string; to: string; amount: number }) {
@@ -53,7 +56,7 @@ export default function SettleUp() {
     setSaving(true)
     try {
       await addExpense(group!.id, {
-        description: `Pago de ${name(from)} a ${name(to)}`,
+        description: `Pago de ${localNames[from] ?? name(from)} a ${localNames[to] ?? name(to)}`,
         amount: round2(amount),
         currency: group!.currency,
         category: 'general',
@@ -88,7 +91,7 @@ export default function SettleUp() {
                     className="flex w-full items-center gap-2 rounded-xl border border-gray-200 bg-white p-3 text-left text-sm hover:border-brand-400"
                   >
                     <span className="flex-1 text-gray-700">
-                      <b>{d.from === uid ? 'Tú' : name(d.from)}</b> → <b>{d.to === uid ? 'ti' : name(d.to)}</b>
+                      <b>{displayName(d.from)}</b> → <b>{d.to === uid ? 'ti' : displayName(d.to)}</b>
                     </span>
                     <span className="font-semibold text-gray-800">{formatMoney(d.amount, group.currency)}</span>
                   </button>
@@ -105,7 +108,7 @@ export default function SettleUp() {
             <select value={from} onChange={(e) => setFrom(e.target.value)} className={inputCls}>
               {members.map((m) => (
                 <option key={m} value={m}>
-                  {m === uid ? 'Tú' : name(m)}
+                  {displayName(m)}
                 </option>
               ))}
             </select>
@@ -119,7 +122,7 @@ export default function SettleUp() {
                 .filter((m) => m !== from)
                 .map((m) => (
                   <option key={m} value={m}>
-                    {m === uid ? 'Tú' : name(m)}
+                    {displayName(m)}
                   </option>
                 ))}
             </select>

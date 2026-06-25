@@ -11,13 +11,16 @@ import {
   deleteDoc,
   setDoc,
   getDoc,
+  getDocs,
+  limit,
   arrayUnion,
   arrayRemove,
   serverTimestamp,
   Timestamp,
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
-import type { Group, Expense, GroupType, ExpenseKind, UserProfile } from '../lib/types'
+import type { Group, Expense, GroupType, ExpenseKind, UserProfile, LocalMember } from '../lib/types'
+import { newLocalId } from '../lib/members'
 
 // ---------------------------------------------------------------------------
 // Perfiles de usuario
@@ -112,6 +115,45 @@ export async function leaveGroup(groupId: string, uid: string) {
 
 export async function removeMember(groupId: string, uid: string) {
   await updateDoc(doc(db, 'groups', groupId), { memberIds: arrayRemove(uid) })
+}
+
+/** Añade una persona SIN cuenta al grupo (solo con su nombre). Devuelve su id. */
+export async function addLocalMember(groupId: string, name: string): Promise<string> {
+  const member: LocalMember = { id: newLocalId(), name: name.trim() }
+  await updateDoc(doc(db, 'groups', groupId), { localMembers: arrayUnion(member) })
+  return member.id
+}
+
+export async function removeLocalMember(
+  groupId: string,
+  current: LocalMember[],
+  id: string,
+) {
+  await updateDoc(doc(db, 'groups', groupId), {
+    localMembers: current.filter((l) => l.id !== id),
+  })
+}
+
+/**
+ * Añade a un usuario YA REGISTRADO al grupo, buscándolo por su correo.
+ * Devuelve 'added', 'notfound' (no existe esa cuenta) o 'already'.
+ */
+export async function addMemberByEmail(
+  groupId: string,
+  email: string,
+  currentMemberIds: string[],
+): Promise<'added' | 'notfound' | 'already'> {
+  const q = query(
+    collection(db, 'users'),
+    where('emailLower', '==', email.trim().toLowerCase()),
+    limit(1),
+  )
+  const snap = await getDocs(q)
+  if (snap.empty) return 'notfound'
+  const uid = snap.docs[0].id
+  if (currentMemberIds.includes(uid)) return 'already'
+  await updateDoc(doc(db, 'groups', groupId), { memberIds: arrayUnion(uid) })
+  return 'added'
 }
 
 export async function deleteGroup(groupId: string) {

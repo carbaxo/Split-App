@@ -2,11 +2,18 @@ import type { Timestamp } from 'firebase/firestore'
 
 export type GroupType = 'trip' | 'home' | 'couple' | 'other'
 
+export interface LocalMember {
+  id: string
+  name: string
+}
+
 export interface Group {
   id: string
   name: string
   type: GroupType
   memberIds: string[]
+  /** Personas sin cuenta (añadidas solo con su nombre). */
+  localMembers?: LocalMember[]
   createdBy: string
   currency: string
   createdAt: Timestamp | null
@@ -18,6 +25,7 @@ export interface UserProfile {
   email: string
   emailLower: string
   photoURL?: string | null
+  emoji?: string | null
   currency?: string
 }
 

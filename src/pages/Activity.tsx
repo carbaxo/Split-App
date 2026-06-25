@@ -5,6 +5,8 @@ import { useUsers, useEnsureUsers } from '../contexts/UsersContext'
 import { useMyGroups, useGroupsExpenses } from '../data/firestore'
 import { formatMoney, formatRelative } from '../lib/format'
 import { getCategory } from '../lib/categories'
+import { buildLocalNames, isLocal } from '../lib/members'
+import { pick, EMPTY_ACTIVITY } from '../lib/funny'
 import type { Expense } from '../lib/types'
 
 interface Item extends Expense {
@@ -30,8 +32,10 @@ export default function Activity() {
     return all.slice(0, 50)
   }, [groups, expensesByGroup])
 
-  useEnsureUsers(useMemo(() => items.map((i) => i.paidBy), [items]))
-  const { name } = useUsers()
+  const localNames = useMemo(() => buildLocalNames(groups), [groups])
+  useEnsureUsers(useMemo(() => items.map((i) => i.paidBy).filter((p) => !isLocal(p)), [items]))
+  const { name: userName } = useUsers()
+  const name = (id: string) => localNames[id] ?? userName(id)
 
   return (
     <div>
@@ -45,7 +49,7 @@ export default function Activity() {
           <p className="text-gray-400">Cargando…</p>
         ) : items.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-8 text-center text-gray-500">
-            No hay actividad todavía.
+            {pick(EMPTY_ACTIVITY, uid)}
           </div>
         ) : (
           <ul className="space-y-2">

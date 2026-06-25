@@ -6,6 +6,7 @@ import { useGroup, useExpenses, addExpense, updateExpense, deleteExpense } from 
 import { splitEqually } from '../lib/balances'
 import { formatMoney, round2 } from '../lib/format'
 import { CATEGORIES } from '../lib/categories'
+import { allMemberIds, buildLocalNames } from '../lib/members'
 import type { SplitMode } from '../lib/types'
 import { SubHeader } from './CreateGroup'
 import { TrashIcon } from '../components/Icons'
@@ -26,7 +27,9 @@ export default function AddExpense() {
   useEnsureUsers(group?.memberIds ?? [])
 
   const editing = expenses?.find((e) => e.id === eid)
-  const members = group?.memberIds ?? []
+  const members = group ? allMemberIds(group) : []
+  const localNames = group ? buildLocalNames([group]) : {}
+  const displayName = (id: string) => (id === uid ? 'Tú' : localNames[id] ?? name(id))
 
   // Estado del formulario (se inicializa una vez que hay datos).
   const [ready, setReady] = useState(false)
@@ -203,7 +206,7 @@ export default function AddExpense() {
           <select value={paidBy} onChange={(e) => setPaidBy(e.target.value)} className={inputCls}>
             {members.map((m) => (
               <option key={m} value={m}>
-                {m === uid ? 'Tú' : name(m)}
+                {displayName(m)}
               </option>
             ))}
           </select>
@@ -249,7 +252,7 @@ export default function AddExpense() {
                     onChange={() => toggleParticipant(m)}
                     className="h-5 w-5 accent-brand-500"
                   />
-                  <span className="flex-1 truncate text-gray-700">{m === uid ? 'Tú' : name(m)}</span>
+                  <span className="flex-1 truncate text-gray-700">{displayName(m)}</span>
 
                   {checked && mode === 'equal' && (
                     <span className="text-sm font-medium text-gray-500">

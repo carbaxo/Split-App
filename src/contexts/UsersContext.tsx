@@ -17,6 +17,8 @@ interface UsersContextValue {
   name: (uid: string) => string
   /** Asegura que los uids indicados se carguen en caché. */
   ensure: (uids: string[]) => void
+  /** Recarga el perfil de un usuario (tras editarlo). */
+  refresh: (uid: string) => Promise<void>
 }
 
 const UsersContext = createContext<UsersContextValue | undefined>(undefined)
@@ -35,6 +37,12 @@ export function UsersProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
+  const refresh = useCallback(async (uid: string) => {
+    requested.current.add(uid)
+    const p = await fetchUserProfile(uid)
+    if (p) setProfiles((prev) => ({ ...prev, [uid]: p }))
+  }, [])
+
   const get = useCallback((uid: string) => profiles[uid], [profiles])
 
   const name = useCallback(
@@ -47,7 +55,7 @@ export function UsersProvider({ children }: { children: ReactNode }) {
   )
 
   return (
-    <UsersContext.Provider value={{ get, name, ensure }}>{children}</UsersContext.Provider>
+    <UsersContext.Provider value={{ get, name, ensure, refresh }}>{children}</UsersContext.Provider>
   )
 }
 

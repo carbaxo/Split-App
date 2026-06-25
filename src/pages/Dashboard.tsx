@@ -5,6 +5,8 @@ import { useMyGroups, useGroupsExpenses } from '../data/firestore'
 import { computeNetBalances } from '../lib/balances'
 import { formatMoney } from '../lib/format'
 import { getGroupType } from '../lib/categories'
+import { allMemberIds } from '../lib/members'
+import { pick, GREETINGS, OWED, OWE, SETTLED, EMPTY_GROUPS } from '../lib/funny'
 import { PlusIcon } from '../components/Icons'
 
 export default function Dashboard() {
@@ -33,28 +35,27 @@ export default function Dashboard() {
   }, [groups, expensesByGroup, uid])
 
   const primary = Object.entries(totalsByCurrency)[0]
+  const name = firstName(user?.displayName, user?.email)
+  const today = new Date().toDateString()
+
+  let balanceLine: string
+  if (!primary || Math.abs(primary[1]) < 0.01) {
+    balanceLine = pick(SETTLED, name + today)
+  } else if (primary[1] > 0) {
+    balanceLine = pick(OWED, name + today).replace('{amount}', formatMoney(primary[1], primary[0]))
+  } else {
+    balanceLine = pick(OWE, name + today).replace('{amount}', formatMoney(-primary[1], primary[0]))
+  }
 
   return (
     <div>
       {/* Cabecera con resumen */}
       <header className="bg-brand-600 px-4 pb-6 pt-6 text-white sm:rounded-b-3xl sm:px-8">
-        <h1 className="text-lg font-semibold opacity-90">Hola, {firstName(user?.displayName, user?.email)}</h1>
+        <h1 className="text-lg font-semibold opacity-90">{pick(GREETINGS, name).replace('{name}', name)}</h1>
         <div className="mt-3">
-          {!primary || Math.abs(primary[1]) < 0.01 ? (
-            <p className="text-2xl font-bold">Estás en paz 🎉</p>
-          ) : primary[1] > 0 ? (
-            <p className="text-2xl font-bold">
-              En total te deben{' '}
-              <span className="text-brand-100">{formatMoney(primary[1], primary[0])}</span>
-            </p>
-          ) : (
-            <p className="text-2xl font-bold">
-              En total debes{' '}
-              <span className="text-amber-200">{formatMoney(-primary[1], primary[0])}</span>
-            </p>
-          )}
+          <p className="text-2xl font-bold">{balanceLine}</p>
           {Object.entries(totalsByCurrency).length > 1 && (
-            <p className="mt-1 text-sm opacity-80">(tienes saldos en varias monedas)</p>
+            <p className="mt-1 text-sm opacity-80">(y encima en varias monedas, presumido)</p>
           )}
         </div>
       </header>
@@ -74,7 +75,7 @@ export default function Dashboard() {
           <p className="text-gray-400">Cargando…</p>
         ) : sorted.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-8 text-center">
-            <p className="text-gray-500">Aún no tienes grupos.</p>
+            <p className="text-gray-500">{pick(EMPTY_GROUPS, uid ?? 'x')}</p>
             <Link
               to="/new-group"
               className="mt-3 inline-block rounded-xl bg-brand-500 px-5 py-2.5 font-semibold text-white hover:bg-brand-600"
@@ -100,7 +101,7 @@ export default function Dashboard() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-semibold text-gray-800">{g.name}</p>
                       <p className="text-sm text-gray-400">
-                        {g.memberIds.length} {g.memberIds.length === 1 ? 'miembro' : 'miembros'}
+                        {allMemberIds(g).length} {allMemberIds(g).length === 1 ? 'miembro' : 'miembros'}
                       </p>
                     </div>
                     <div className="text-right">

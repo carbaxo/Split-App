@@ -39,7 +39,9 @@ export default function Login() {
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Split App</h1>
           <p className="mt-1 text-sm text-gray-500">
-            {mode === 'signin' ? 'Inicia sesión para continuar.' : 'Crea tu cuenta.'}
+            {mode === 'signin'
+              ? 'Entra y descubre quién te debe pasta.'
+              : 'Crea tu cuenta y empieza a llevar las cuentas (y los rencores).'}
           </p>
         </div>
 

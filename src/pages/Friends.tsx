@@ -3,7 +3,10 @@ import { useAuth } from '../contexts/AuthContext'
 import { useUsers, useEnsureUsers } from '../contexts/UsersContext'
 import { useMyGroups, useGroupsExpenses } from '../data/firestore'
 import { computePairwiseBalances } from '../lib/balances'
+import { buildLocalNames, isLocal } from '../lib/members'
 import { formatMoney } from '../lib/format'
+import { pick, EMPTY_FRIENDS } from '../lib/funny'
+import { Avatar } from '../components/Avatar'
 
 export default function Friends() {
   const { user } = useAuth()
@@ -28,8 +31,10 @@ export default function Friends() {
   }, [groups, expensesByGroup, uid])
 
   const friendIds = Object.keys(friends)
-  useEnsureUsers(friendIds)
-  const { name, get } = useUsers()
+  const localNames = useMemo(() => buildLocalNames(groups), [groups])
+  useEnsureUsers(useMemo(() => friendIds.filter((f) => !isLocal(f)), [friendIds]))
+  const { name: userName, get } = useUsers()
+  const name = (id: string) => localNames[id] ?? userName(id)
 
   return (
     <div>
@@ -43,7 +48,7 @@ export default function Friends() {
           <p className="text-gray-400">Cargando…</p>
         ) : friendIds.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-8 text-center text-gray-500">
-            Aún no compartes gastos con nadie. Crea un grupo e invita a tus amigos.
+            {pick(EMPTY_FRIENDS, uid)}
           </div>
         ) : (
           <ul className="space-y-2.5">
@@ -55,9 +60,7 @@ export default function Friends() {
                   key={fid}
                   className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-white p-3.5 shadow-sm"
                 >
-                  <span className="flex h-11 w-11 items-center justify-center rounded-full bg-brand-100 font-bold text-brand-700">
-                    {(p?.name ?? '?').charAt(0).toUpperCase()}
-                  </span>
+                  <Avatar emoji={p?.emoji} name={name(fid)} className="h-11 w-11 text-xl" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-semibold text-gray-800">{name(fid)}</p>
                     {balances.length === 0 && <p className="text-sm text-gray-400">en paz</p>}
