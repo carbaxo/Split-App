@@ -6,7 +6,7 @@
 import { writeFileSync } from 'node:fs'
 import { deflateSync } from 'node:zlib'
 
-const BG = [99, 102, 241] // #6366f1 índigo
+const BG = [22, 168, 127] // #16a87f verde marca
 const FG = [255, 255, 255]
 
 function crc32(buf) {

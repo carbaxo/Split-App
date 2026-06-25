@@ -1,8 +1,20 @@
 # Split App
 
-App web instalable (PWA) con autenticación por **enlace de correo** y datos en
-**Firebase**. Funciona en **móvil y desktop** desde una sola base de código, y en
-Android se puede **instalar como app**.
+Clon de **Splitwise**: reparte gastos con tus amigos. App web instalable (PWA)
+con datos en **Firebase**, en **móvil y desktop** desde una sola base de código,
+e instalable como app en Android.
+
+## Funciones
+
+- **Grupos** (viaje, piso, pareja, otro) con varios miembros.
+- **Gastos** con categoría, quién pagó y reparto **a partes iguales, exacto,
+  por porcentaje o por partes**.
+- **Saldos** con simplificación de deudas (“quién paga a quién”).
+- **Saldar deudas** registrando pagos entre miembros.
+- **Amigos**: tu saldo con cada persona sumando todos los grupos.
+- **Actividad** reciente y **multimoneda** por grupo.
+- **Invitaciones** por enlace para que tus amigos se unan a un grupo.
+- Login con **Google** o **email + contraseña**.
 
 ## Stack
 
@@ -45,9 +57,7 @@ En Firebase Console → **Firestore Database → Create database**.
 
 - Publica las reglas de seguridad de [`firestore.rules`](firestore.rules)
   (cópialas en la pestaña **Rules**, o usa la CLI — ver más abajo).
-- Crea el índice compuesto de [`firestore.indexes.json`](firestore.indexes.json).
-  La primera vez que ejecutes la consulta, la consola te dará un enlace directo
-  para crearlo con un clic.
+- No hace falta crear índices compuestos: las consultas usan campos simples.
 
 ### 4. Variables de entorno
 
@@ -142,23 +152,39 @@ firebase deploy --only hosting,firestore # despliega app + reglas + índices
 
 ```
 src/
-  lib/firebase.ts          Inicialización de Firebase (auth + Firestore)
-  contexts/AuthContext.tsx Estado de sesión + login con Google / logout
+  lib/
+    firebase.ts            Inicialización de Firebase (auth + Firestore)
+    types.ts               Tipos (Group, Expense, UserProfile…)
+    balances.ts            Cálculo de saldos y simplificación de deudas
+    categories.ts          Categorías de gasto y tipos de grupo
+    format.ts              Formato de dinero, fechas y monedas
+  data/firestore.ts        Lecturas en tiempo real + operaciones de escritura
+  contexts/
+    AuthContext.tsx        Sesión + login (Google / email+contraseña)
+    UsersContext.tsx       Caché de perfiles para mostrar nombres
   components/
-    Login.tsx              Pantalla de acceso (botón de Google)
-    Layout.tsx             Navegación responsive (sidebar desktop / bottom-nav móvil)
+    Layout.tsx             Navegación responsive (sidebar / bottom-nav)
+    Login.tsx              Pantalla de acceso
+    Icons.tsx              Iconos SVG
   pages/
-    Dashboard.tsx          Demo de guardado de datos en Firestore
-    Account.tsx            Datos de la cuenta
+    Dashboard.tsx          Inicio: resumen + lista de grupos
+    GroupDetail.tsx        Grupo: gastos · saldos · miembros
+    AddExpense.tsx         Añadir / editar gasto (4 modos de reparto)
+    SettleUp.tsx           Registrar pagos para saldar deudas
+    Friends.tsx            Saldo por amigo
+    Activity.tsx           Actividad reciente
+    Account.tsx            Perfil y sesión
+    CreateGroup.tsx        Crear grupo
+    JoinGroup.tsx          Unirse por enlace/código
   App.tsx                  Rutas + protección de rutas
-firestore.rules            Reglas de seguridad por usuario
-firestore.indexes.json     Índices compuestos
+firestore.rules            Reglas de seguridad
 firebase.json              Config de Firebase Hosting + Firestore
 scripts/generate-icons.mjs Generador de iconos PWA
 ```
 
-## Próximos pasos
+## Modelo de datos (Firestore)
 
-El framework está listo. Falta definir **qué hace la app** (modelo de datos:
-grupos, gastos, repartos…) para sustituir la colección de ejemplo `items` por el
-modelo real.
+- `users/{uid}` — perfil público: nombre, email, foto.
+- `groups/{groupId}` — `name`, `type`, `currency`, `memberIds[]`, `createdBy`.
+- `groups/{groupId}/expenses/{id}` — gasto o pago: `description`, `amount`,
+  `paidBy`, `splits{uid: importe}`, `category`, `date`, `kind`.

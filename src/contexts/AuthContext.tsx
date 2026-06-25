@@ -18,6 +18,7 @@ import {
   type User,
 } from 'firebase/auth'
 import { auth } from '../lib/firebase'
+import { upsertUserProfile } from '../data/firestore'
 
 const googleProvider = new GoogleAuthProvider()
 
@@ -71,6 +72,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, (newUser) => {
       setUser(newUser)
       setLoading(false)
+      // Guarda/actualiza el perfil para que otros miembros vean tu nombre.
+      if (newUser) {
+        upsertUserProfile({
+          uid: newUser.uid,
+          name: newUser.displayName || newUser.email?.split('@')[0] || 'Usuario',
+          email: newUser.email ?? '',
+          photoURL: newUser.photoURL,
+        }).catch(() => {})
+      }
     })
     return unsubscribe
   }, [])

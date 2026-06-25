@@ -1,131 +1,148 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  getDocs,
-  addDoc,
-  deleteDoc,
-  doc,
-  serverTimestamp,
-} from 'firebase/firestore'
-import { db } from '../lib/firebase'
+import { useMemo } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-
-// Documento de la colección de ejemplo `items` en Firestore.
-// Sirve como prueba de que el guardado de datos por usuario funciona.
-// Cuando definamos qué hace la app lo sustituimos por el modelo real.
-interface Item {
-  id: string
-  title: string
-}
+import { useMyGroups, useGroupsExpenses } from '../data/firestore'
+import { computeNetBalances } from '../lib/balances'
+import { formatMoney } from '../lib/format'
+import { getGroupType } from '../lib/categories'
+import { PlusIcon } from '../components/Icons'
 
 export default function Dashboard() {
   const { user } = useAuth()
-  const [items, setItems] = useState<Item[]>([])
-  const [title, setTitle] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const uid = user?.uid
+  const groups = useMyGroups(uid)
+  const expensesByGroup = useGroupsExpenses(groups)
+  const navigate = useNavigate()
 
-  async function loadItems() {
-    if (!user) return
-    setLoading(true)
-    try {
-      const q = query(
-        collection(db, 'items'),
-        where('userId', '==', user.uid),
-        orderBy('createdAt', 'desc'),
-      )
-      const snap = await getDocs(q)
-      setItems(snap.docs.map((d) => ({ id: d.id, title: d.data().title as string })))
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudieron cargar los datos.')
-    } finally {
-      setLoading(false)
+  const sorted = useMemo(
+    () => (groups ? [...groups].sort((a, b) => a.name.localeCompare(b.name)) : null),
+    [groups],
+  )
+
+  // Saldo total del usuario (suma de su neto en cada grupo, por moneda).
+  const totalsByCurrency = useMemo(() => {
+    const totals: Record<string, number> = {}
+    if (!groups || !uid) return totals
+    for (const g of groups) {
+      const exps = expensesByGroup[g.id]
+      if (!exps) continue
+      const net = computeNetBalances(exps)[uid] ?? 0
+      totals[g.currency] = (totals[g.currency] ?? 0) + net
     }
-  }
+    return totals
+  }, [groups, expensesByGroup, uid])
 
-  useEffect(() => {
-    loadItems()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user])
-
-  async function addItem(e: FormEvent) {
-    e.preventDefault()
-    if (!title.trim() || !user) return
-    setError(null)
-    try {
-      await addDoc(collection(db, 'items'), {
-        title: title.trim(),
-        userId: user.uid,
-        createdAt: serverTimestamp(),
-      })
-      setTitle('')
-      loadItems()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo guardar.')
-    }
-  }
-
-  async function removeItem(id: string) {
-    setError(null)
-    try {
-      await deleteDoc(doc(db, 'items', id))
-      loadItems()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo eliminar.')
-    }
-  }
+  const primary = Object.entries(totalsByCurrency)[0]
 
   return (
-    <div className="mx-auto max-w-2xl">
-      <h1 className="text-2xl font-bold sm:text-3xl">Inicio</h1>
-      <p className="mt-1 text-slate-400">
-        Prueba de guardado en Firestore. Lo que crees aquí se asocia a tu cuenta.
-      </p>
+    <div>
+      {/* Cabecera con resumen */}
+      <header className="bg-brand-600 px-4 pb-6 pt-6 text-white sm:rounded-b-3xl sm:px-8">
+        <h1 className="text-lg font-semibold opacity-90">Hola, {firstName(user?.displayName, user?.email)}</h1>
+        <div className="mt-3">
+          {!primary || Math.abs(primary[1]) < 0.01 ? (
+            <p className="text-2xl font-bold">Estás en paz 🎉</p>
+          ) : primary[1] > 0 ? (
+            <p className="text-2xl font-bold">
+              En total te deben{' '}
+              <span className="text-brand-100">{formatMoney(primary[1], primary[0])}</span>
+            </p>
+          ) : (
+            <p className="text-2xl font-bold">
+              En total debes{' '}
+              <span className="text-amber-200">{formatMoney(-primary[1], primary[0])}</span>
+            </p>
+          )}
+          {Object.entries(totalsByCurrency).length > 1 && (
+            <p className="mt-1 text-sm opacity-80">(tienes saldos en varias monedas)</p>
+          )}
+        </div>
+      </header>
 
-      <form onSubmit={addItem} className="mt-6 flex gap-2">
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Escribe algo y guárdalo…"
-          className="flex-1 rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 outline-none ring-indigo-500 placeholder:text-slate-500 focus:ring-2"
-        />
-        <button
-          type="submit"
-          className="rounded-xl bg-indigo-500 px-5 py-3 font-semibold text-white transition hover:bg-indigo-400"
-        >
-          Guardar
-        </button>
-      </form>
+      <div className="px-4 py-5 sm:px-8">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-base font-semibold text-gray-700">Tus grupos</h2>
+          <button
+            onClick={() => navigate('/join')}
+            className="text-sm font-semibold text-brand-600 hover:text-brand-700"
+          >
+            Unirme con código
+          </button>
+        </div>
 
-      {error && <p className="mt-3 text-sm text-rose-400">{error}</p>}
-
-      <div className="mt-6 space-y-2">
-        {loading ? (
-          <p className="text-slate-400">Cargando…</p>
-        ) : items.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-slate-500">
-            Todavía no has guardado nada.
-          </p>
-        ) : (
-          items.map((item) => (
-            <div
-              key={item.id}
-              className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900 px-4 py-3"
+        {sorted === null ? (
+          <p className="text-gray-400">Cargando…</p>
+        ) : sorted.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-8 text-center">
+            <p className="text-gray-500">Aún no tienes grupos.</p>
+            <Link
+              to="/new-group"
+              className="mt-3 inline-block rounded-xl bg-brand-500 px-5 py-2.5 font-semibold text-white hover:bg-brand-600"
             >
-              <span>{item.title}</span>
-              <button
-                onClick={() => removeItem(item.id)}
-                className="text-sm text-slate-500 hover:text-rose-400"
-              >
-                Eliminar
-              </button>
-            </div>
-          ))
+              Crear mi primer grupo
+            </Link>
+          </div>
+        ) : (
+          <ul className="space-y-2.5">
+            {sorted.map((g) => {
+              const exps = expensesByGroup[g.id]
+              const net = exps && uid ? computeNetBalances(exps)[uid] ?? 0 : 0
+              const type = getGroupType(g.type)
+              return (
+                <li key={g.id}>
+                  <Link
+                    to={`/group/${g.id}`}
+                    className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-white p-3.5 shadow-sm transition hover:shadow-md"
+                  >
+                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-2xl">
+                      {type.emoji}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold text-gray-800">{g.name}</p>
+                      <p className="text-sm text-gray-400">
+                        {g.memberIds.length} {g.memberIds.length === 1 ? 'miembro' : 'miembros'}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      {!exps ? (
+                        <span className="text-sm text-gray-300">…</span>
+                      ) : Math.abs(net) < 0.01 ? (
+                        <span className="text-sm text-gray-400">en paz</span>
+                      ) : (
+                        <>
+                          <span className="block text-xs text-gray-400">
+                            {net > 0 ? 'te deben' : 'debes'}
+                          </span>
+                          <span
+                            className={`text-sm font-bold ${net > 0 ? 'text-brand-600' : 'text-rose-500'}`}
+                          >
+                            {formatMoney(Math.abs(net), g.currency)}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </Link>
+                </li>
+              )
+            })}
+          </ul>
         )}
       </div>
+
+      {/* Botón flotante crear grupo */}
+      <Link
+        to="/new-group"
+        className="fixed bottom-20 right-4 z-10 flex items-center gap-2 rounded-full bg-brand-500 px-5 py-3.5 font-semibold text-white shadow-lg shadow-brand-500/40 transition hover:bg-brand-600 sm:bottom-8 sm:right-8"
+      >
+        <PlusIcon className="h-5 w-5" />
+        Crear grupo
+      </Link>
     </div>
   )
+}
+
+function firstName(name?: string | null, email?: string | null): string {
+  if (name) return name.split(' ')[0]
+  if (email) return email.split('@')[0]
+  return 'crack'
 }

@@ -1,7 +1,20 @@
 @import "tailwindcss";
 
+@theme {
+  --color-brand-50: #e9faf4;
+  --color-brand-100: #c9f3e4;
+  --color-brand-200: #97e7cc;
+  --color-brand-300: #5fd6b0;
+  --color-brand-400: #2fbf94;
+  --color-brand-500: #16a87f;
+  --color-brand-600: #0e8a68;
+  --color-brand-700: #0d6e54;
+  --color-brand-800: #0f5744;
+  --color-brand-900: #0d473a;
+}
+
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 html,
@@ -12,8 +25,18 @@ body,
 
 body {
   margin: 0;
+  background: #f4f6f8;
+  color: #1f2937;
   -webkit-font-smoothing: antialiased;
-  /* Respeta las "safe areas" de móviles con notch cuando se instala como PWA */
-  padding: env(safe-area-inset-top) env(safe-area-inset-right)
-    env(safe-area-inset-bottom) env(safe-area-inset-left);
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Respeta las "safe areas" de móviles con notch cuando se instala como PWA */
+#root {
+  padding: env(safe-area-inset-top) 0 0 0;
+}
+
+button {
+  font-family: inherit;
 }
