@@ -2,7 +2,6 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
 import Layout from './components/Layout'
 import Login from './components/Login'
-import AuthCallback from './pages/AuthCallback'
 import Dashboard from './pages/Dashboard'
 import Account from './pages/Account'
 
@@ -27,7 +26,6 @@ export default function App() {
 
   return (
     <Routes>
-      <Route path="/auth/callback" element={<AuthCallback />} />
       <Route
         path="/login"
         element={user ? <Navigate to="/" replace /> : <Login />}

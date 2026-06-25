@@ -106,9 +106,21 @@ Abre <http://localhost:5173>, introduce tu correo y entra con el enlace que reci
 
 ## Despliegue
 
-El proyecto es un sitio estático (SPA). Hay configuración de _fallback_ de rutas
-para **Firebase Hosting** (`firebase.json`), **Vercel** (`vercel.json`) y
-**Netlify** (`public/_redirects`).
+El proyecto es un sitio estático (SPA). Hay configuración para **GitHub Pages**
+(workflow en `.github/workflows/deploy.yml`), **Firebase Hosting**
+(`firebase.json`), **Vercel** (`vercel.json`) y **Netlify** (`public/_redirects`).
+
+### Opción recomendada — GitHub Pages (automático)
+
+La app se publica en `https://carbaxo.github.io/Split-App/`.
+
+1. En GitHub: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+2. Cada push a la rama dispara el build y el despliegue (ver pestaña **Actions**).
+3. En **Firebase → Authentication → Settings → Authorized domains**, añade
+   `carbaxo.github.io`.
+
+> La subruta `/Split-App/` ya está configurada en `vite.config.ts` (`base`).
+> Si cambias el nombre del repo o el dominio, actualiza ese `base`.
 
 ### Opción A — Firebase Hosting (con la CLI)
 

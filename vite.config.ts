@@ -5,6 +5,9 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  // GitHub Pages publica el proyecto bajo /Split-App/.
+  // Si despliegas en otro sitio (raíz del dominio), cambia esto a '/'.
+  base: '/Split-App/',
   plugins: [
     react(),
     tailwindcss(),
@@ -19,8 +22,9 @@ export default defineConfig({
         background_color: '#0f172a',
         display: 'standalone',
         orientation: 'portrait',
-        start_url: '/',
-        scope: '/',
+        start_url: '/Split-App/',
+        scope: '/Split-App/',
+        id: '/Split-App/',
         lang: 'es',
         icons: [
           {

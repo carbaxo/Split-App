@@ -22,8 +22,6 @@ interface AuthContextValue {
   user: User | null
   loading: boolean
   signInWithEmail: (email: string) => Promise<{ error: string | null }>
-  completeSignInFromLink: (href: string) => Promise<{ error: string | null }>
-  isEmailLink: (href: string) => boolean
   signOut: () => Promise<void>
 }
 
@@ -34,19 +32,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Escucha login / logout / refresco de token.
-    const unsubscribe = onAuthStateChanged(auth, (newUser) => {
-      setUser(newUser)
-      setLoading(false)
+    let cleanup: (() => void) | undefined
+
+    // Al cargar la app, comprueba si venimos del enlace del correo.
+    // Firebase añade sus parámetros a la URL; aquí completamos el login.
+    async function completeLinkSignInIfPresent() {
+      if (!isSignInWithEmailLink(auth, window.location.href)) return
+      let email = window.localStorage.getItem(EMAIL_STORAGE_KEY)
+      // Si abre el enlace en otro dispositivo/navegador, pedimos el correo.
+      if (!email) {
+        email = window.prompt('Confirma tu correo electrónico para entrar:') ?? ''
+      }
+      if (!email) return
+      try {
+        await signInWithEmailLink(auth, email, window.location.href)
+        window.localStorage.removeItem(EMAIL_STORAGE_KEY)
+      } catch {
+        // Enlace caducado o inválido: se ignora y el usuario verá el login.
+      } finally {
+        // Limpia los parámetros de la URL para no reintentar al recargar.
+        window.history.replaceState({}, '', `${import.meta.env.BASE_URL}`)
+      }
+    }
+
+    completeLinkSignInIfPresent().finally(() => {
+      // Escucha login / logout / refresco de token.
+      const unsubscribe = onAuthStateChanged(auth, (newUser) => {
+        setUser(newUser)
+        setLoading(false)
+      })
+      cleanup = unsubscribe
     })
-    return unsubscribe
+
+    return () => cleanup?.()
   }, [])
 
   async function signInWithEmail(email: string) {
     try {
       await sendSignInLinkToEmail(auth, email, {
         // A dónde vuelve el usuario tras hacer clic en el enlace del correo.
-        url: `${window.location.origin}/auth/callback`,
+        url: `${window.location.origin}${import.meta.env.BASE_URL}`,
         handleCodeInApp: true,
       })
       // Guardamos el correo para completar el login al volver (sin re-pedirlo).
@@ -57,39 +82,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  function isEmailLink(href: string) {
-    return isSignInWithEmailLink(auth, href)
-  }
-
-  async function completeSignInFromLink(href: string) {
-    try {
-      let email = window.localStorage.getItem(EMAIL_STORAGE_KEY)
-      // Si abre el enlace en otro dispositivo/navegador, pedimos el correo.
-      if (!email) {
-        email = window.prompt('Confirma tu correo electrónico para entrar:') ?? ''
-      }
-      if (!email) return { error: 'Se necesita el correo para completar el acceso.' }
-      await signInWithEmailLink(auth, email, href)
-      window.localStorage.removeItem(EMAIL_STORAGE_KEY)
-      return { error: null }
-    } catch (e) {
-      return { error: e instanceof Error ? e.message : 'El enlace no es válido o ha caducado.' }
-    }
-  }
-
   async function signOut() {
     await fbSignOut(auth)
   }
 
   const value = useMemo<AuthContextValue>(
-    () => ({
-      user,
-      loading,
-      signInWithEmail,
-      completeSignInFromLink,
-      isEmailLink,
-      signOut,
-    }),
+    () => ({ user, loading, signInWithEmail, signOut }),
     [user, loading],
   )
 
