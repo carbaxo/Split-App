@@ -14,15 +14,23 @@ export default function CreateGroup() {
   const [type, setType] = useState<GroupType>('trip')
   const [currency, setCurrency] = useState('EUR')
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   async function handleCreate() {
     if (!name.trim() || !user) return
     setSaving(true)
+    setError(null)
     try {
       const id = await createGroup({ name: name.trim(), type, currency, uid: user.uid })
       navigate(`/group/${id}`, { replace: true })
-    } catch {
+    } catch (e) {
       setSaving(false)
+      const msg = e instanceof Error ? e.message : String(e)
+      setError(
+        /permission|insufficient/i.test(msg)
+          ? 'Permiso denegado por Firestore. Revisa que has publicado las reglas de seguridad nuevas.'
+          : `No se pudo crear el grupo: ${msg}`,
+      )
     }
   }
 
@@ -75,6 +83,8 @@ export default function CreateGroup() {
             ))}
           </select>
         </div>
+
+        {error && <p className="text-sm text-rose-600">{error}</p>}
 
         <button
           onClick={handleCreate}
