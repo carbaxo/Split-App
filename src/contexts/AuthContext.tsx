@@ -8,20 +8,21 @@ import {
 } from 'react'
 import {
   onAuthStateChanged,
-  sendSignInLinkToEmail,
-  isSignInWithEmailLink,
-  signInWithEmailLink,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut as fbSignOut,
   type User,
 } from 'firebase/auth'
 import { auth } from '../lib/firebase'
 
-const EMAIL_STORAGE_KEY = 'split-app:emailForSignIn'
+const googleProvider = new GoogleAuthProvider()
 
 interface AuthContextValue {
   user: User | null
   loading: boolean
-  signInWithEmail: (email: string) => Promise<{ error: string | null }>
+  signInWithGoogle: () => Promise<{ error: string | null }>
   signOut: () => Promise<void>
 }
 
@@ -32,53 +33,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    let cleanup: (() => void) | undefined
-
-    // Al cargar la app, comprueba si venimos del enlace del correo.
-    // Firebase añade sus parámetros a la URL; aquí completamos el login.
-    async function completeLinkSignInIfPresent() {
-      if (!isSignInWithEmailLink(auth, window.location.href)) return
-      let email = window.localStorage.getItem(EMAIL_STORAGE_KEY)
-      // Si abre el enlace en otro dispositivo/navegador, pedimos el correo.
-      if (!email) {
-        email = window.prompt('Confirma tu correo electrónico para entrar:') ?? ''
-      }
-      if (!email) return
-      try {
-        await signInWithEmailLink(auth, email, window.location.href)
-        window.localStorage.removeItem(EMAIL_STORAGE_KEY)
-      } catch {
-        // Enlace caducado o inválido: se ignora y el usuario verá el login.
-      } finally {
-        // Limpia los parámetros de la URL para no reintentar al recargar.
-        window.history.replaceState({}, '', `${import.meta.env.BASE_URL}`)
-      }
-    }
-
-    completeLinkSignInIfPresent().finally(() => {
-      // Escucha login / logout / refresco de token.
-      const unsubscribe = onAuthStateChanged(auth, (newUser) => {
-        setUser(newUser)
-        setLoading(false)
-      })
-      cleanup = unsubscribe
+    // Si volvemos de un login por redirección (móvil), recoge el resultado.
+    getRedirectResult(auth).catch(() => {
+      // Sin redirección pendiente: no pasa nada.
     })
 
-    return () => cleanup?.()
+    // Escucha login / logout / refresco de token.
+    const unsubscribe = onAuthStateChanged(auth, (newUser) => {
+      setUser(newUser)
+      setLoading(false)
+    })
+    return unsubscribe
   }, [])
 
-  async function signInWithEmail(email: string) {
+  async function signInWithGoogle() {
     try {
-      await sendSignInLinkToEmail(auth, email, {
-        // A dónde vuelve el usuario tras hacer clic en el enlace del correo.
-        url: `${window.location.origin}${import.meta.env.BASE_URL}`,
-        handleCodeInApp: true,
-      })
-      // Guardamos el correo para completar el login al volver (sin re-pedirlo).
-      window.localStorage.setItem(EMAIL_STORAGE_KEY, email)
+      // En la mayoría de navegadores el popup funciona y es más fluido.
+      await signInWithPopup(auth, googleProvider)
       return { error: null }
     } catch (e) {
-      return { error: e instanceof Error ? e.message : 'No se pudo enviar el enlace.' }
+      // En algunos móviles / PWA instalada el popup se bloquea: usamos
+      // redirección como plan B.
+      const code = (e as { code?: string })?.code ?? ''
+      if (
+        code === 'auth/popup-blocked' ||
+        code === 'auth/cancelled-popup-request' ||
+        code === 'auth/operation-not-supported-in-this-environment'
+      ) {
+        try {
+          await signInWithRedirect(auth, googleProvider)
+          return { error: null }
+        } catch (e2) {
+          return {
+            error: e2 instanceof Error ? e2.message : 'No se pudo iniciar sesión.',
+          }
+        }
+      }
+      if (code === 'auth/popup-closed-by-user') {
+        return { error: null } // El usuario cerró el popup: sin error.
+      }
+      return { error: e instanceof Error ? e.message : 'No se pudo iniciar sesión.' }
     }
   }
 
@@ -87,7 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, loading, signInWithEmail, signOut }),
+    () => ({ user, loading, signInWithGoogle, signOut }),
     [user, loading],
   )
 

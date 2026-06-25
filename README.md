@@ -7,18 +7,17 @@ Android se puede **instalar como app**.
 ## Stack
 
 - **Vite + React + TypeScript** — base de código única, responsive.
-- **Firebase Authentication** — login por enlace de correo (email link / passwordless).
+- **Firebase Authentication** — inicio de sesión con Google (un clic).
 - **Cloud Firestore** — base de datos en la nube, con reglas de seguridad por usuario.
 - **vite-plugin-pwa** — manifest + service worker → instalable en Android.
 - **Tailwind CSS v4** — diseño adaptable móvil/desktop.
 
 ## Cómo funciona la autenticación
 
-1. El usuario introduce su correo en la pantalla de login.
-2. Firebase le envía un **enlace de acceso** por correo.
-3. Al hacer clic, vuelve a `/auth/callback`, la app completa el login y entra.
-4. La sesión se guarda en el dispositivo y se mantiene al volver a abrir la app.
-5. Todo lo que cree el usuario se guarda en Firestore asociado a su `uid`,
+1. El usuario pulsa "Continuar con Google".
+2. Elige su cuenta de Google y entra (popup; en móvil cae a redirección si hace falta).
+3. La sesión se guarda en el dispositivo y se mantiene al volver a abrir la app.
+4. Todo lo que cree el usuario se guarda en Firestore asociado a su `uid`,
    protegido con **reglas de seguridad** (cada usuario solo ve sus datos).
 
 ---
@@ -31,15 +30,14 @@ Android se puede **instalar como app**.
 2. Dentro del proyecto, crea una **app web** (icono `</>`).
 3. Copia el objeto de configuración (`apiKey`, `authDomain`, `projectId`, etc.).
 
-### 2. Activar la autenticación por enlace de correo
+### 2. Activar el inicio de sesión con Google
 
 En Firebase Console → **Authentication → Sign-in method**:
 
-- Activa el proveedor **Email/Password** y, dentro, marca también
-  **Email link (passwordless sign-in)**.
+- Activa el proveedor **Google** (elige un correo de soporte y guarda).
 
 En **Authentication → Settings → Authorized domains**, asegúrate de que están
-`localhost` y tu dominio de producción.
+`localhost` y tu dominio de producción (p. ej. `carbaxo.github.io`).
 
 ### 3. Crear la base de datos Firestore
 
@@ -145,12 +143,11 @@ firebase deploy --only hosting,firestore # despliega app + reglas + índices
 ```
 src/
   lib/firebase.ts          Inicialización de Firebase (auth + Firestore)
-  contexts/AuthContext.tsx Estado de sesión + login/logout por enlace de correo
+  contexts/AuthContext.tsx Estado de sesión + login con Google / logout
   components/
-    Login.tsx              Pantalla de acceso por correo
+    Login.tsx              Pantalla de acceso (botón de Google)
     Layout.tsx             Navegación responsive (sidebar desktop / bottom-nav móvil)
   pages/
-    AuthCallback.tsx       Completa el login desde el enlace del correo
     Dashboard.tsx          Demo de guardado de datos en Firestore
     Account.tsx            Datos de la cuenta
   App.tsx                  Rutas + protección de rutas
