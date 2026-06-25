@@ -12,6 +12,8 @@ import {
   signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
   signOut as fbSignOut,
   type User,
 } from 'firebase/auth'
@@ -19,14 +21,41 @@ import { auth } from '../lib/firebase'
 
 const googleProvider = new GoogleAuthProvider()
 
+type Result = { error: string | null }
+
 interface AuthContextValue {
   user: User | null
   loading: boolean
-  signInWithGoogle: () => Promise<{ error: string | null }>
+  signInWithGoogle: () => Promise<Result>
+  signInWithPassword: (email: string, password: string) => Promise<Result>
+  signUpWithPassword: (email: string, password: string) => Promise<Result>
   signOut: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
+
+// Traduce los errores más habituales de Firebase a mensajes claros en español.
+function describeAuthError(e: unknown): string {
+  const code = (e as { code?: string })?.code ?? ''
+  switch (code) {
+    case 'auth/invalid-email':
+      return 'El correo no es válido.'
+    case 'auth/missing-password':
+      return 'Escribe una contraseña.'
+    case 'auth/weak-password':
+      return 'La contraseña debe tener al menos 6 caracteres.'
+    case 'auth/email-already-in-use':
+      return 'Ya existe una cuenta con ese correo. Inicia sesión.'
+    case 'auth/invalid-credential':
+    case 'auth/wrong-password':
+    case 'auth/user-not-found':
+      return 'Correo o contraseña incorrectos.'
+    case 'auth/too-many-requests':
+      return 'Demasiados intentos. Prueba de nuevo en un rato.'
+    default:
+      return e instanceof Error ? e.message : 'No se pudo completar la operación.'
+  }
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
@@ -64,15 +93,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await signInWithRedirect(auth, googleProvider)
           return { error: null }
         } catch (e2) {
-          return {
-            error: e2 instanceof Error ? e2.message : 'No se pudo iniciar sesión.',
-          }
+          return { error: describeAuthError(e2) }
         }
       }
       if (code === 'auth/popup-closed-by-user') {
         return { error: null } // El usuario cerró el popup: sin error.
       }
-      return { error: e instanceof Error ? e.message : 'No se pudo iniciar sesión.' }
+      return { error: describeAuthError(e) }
+    }
+  }
+
+  async function signInWithPassword(email: string, password: string) {
+    try {
+      await signInWithEmailAndPassword(auth, email, password)
+      return { error: null }
+    } catch (e) {
+      return { error: describeAuthError(e) }
+    }
+  }
+
+  async function signUpWithPassword(email: string, password: string) {
+    try {
+      await createUserWithEmailAndPassword(auth, email, password)
+      return { error: null }
+    } catch (e) {
+      return { error: describeAuthError(e) }
     }
   }
 
@@ -81,7 +126,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, loading, signInWithGoogle, signOut }),
+    () => ({
+      user,
+      loading,
+      signInWithGoogle,
+      signInWithPassword,
+      signUpWithPassword,
+      signOut,
+    }),
     [user, loading],
   )
 

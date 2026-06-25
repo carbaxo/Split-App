@@ -1,8 +1,11 @@
-import { useState } from 'react'
+import { useState, type FormEvent } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 
 export default function Login() {
-  const { signInWithGoogle } = useAuth()
+  const { signInWithGoogle, signInWithPassword, signUpWithPassword } = useAuth()
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -14,27 +17,102 @@ export default function Login() {
     setLoading(false)
   }
 
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    setLoading(true)
+    setError(null)
+    const action = mode === 'signin' ? signInWithPassword : signUpWithPassword
+    const { error } = await action(email.trim(), password)
+    if (error) setError(error)
+    setLoading(false)
+  }
+
   return (
     <div className="flex min-h-full items-center justify-center bg-slate-950 px-4 text-slate-100">
       <div className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-xl sm:p-8">
-        <div className="mb-8 text-center">
+        <div className="mb-6 text-center">
           <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-500 text-2xl font-bold">
             S
           </div>
           <h1 className="text-2xl font-bold">Split App</h1>
-          <p className="mt-1 text-sm text-slate-400">Entra con tu cuenta de Google.</p>
+          <p className="mt-1 text-sm text-slate-400">
+            {mode === 'signin' ? 'Inicia sesión para continuar.' : 'Crea tu cuenta.'}
+          </p>
         </div>
 
+        {/* Email + contraseña */}
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
+            <label htmlFor="email" className="mb-1 block text-sm font-medium text-slate-300">
+              Correo electrónico
+            </label>
+            <input
+              id="email"
+              type="email"
+              required
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="tu@email.com"
+              className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-base outline-none ring-indigo-500 placeholder:text-slate-500 focus:ring-2"
+            />
+          </div>
+          <div>
+            <label htmlFor="password" className="mb-1 block text-sm font-medium text-slate-300">
+              Contraseña
+            </label>
+            <input
+              id="password"
+              type="password"
+              required
+              minLength={6}
+              autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Mínimo 6 caracteres"
+              className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-base outline-none ring-indigo-500 placeholder:text-slate-500 focus:ring-2"
+            />
+          </div>
+
+          {error && <p className="text-sm text-rose-400">{error}</p>}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full rounded-xl bg-indigo-500 px-4 py-3 text-base font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loading ? 'Un momento…' : mode === 'signin' ? 'Iniciar sesión' : 'Crear cuenta'}
+          </button>
+        </form>
+
+        <p className="mt-3 text-center text-sm text-slate-400">
+          {mode === 'signin' ? '¿No tienes cuenta?' : '¿Ya tienes cuenta?'}{' '}
+          <button
+            type="button"
+            onClick={() => {
+              setMode(mode === 'signin' ? 'signup' : 'signin')
+              setError(null)
+            }}
+            className="font-medium text-indigo-400 hover:text-indigo-300"
+          >
+            {mode === 'signin' ? 'Crea una' : 'Inicia sesión'}
+          </button>
+        </p>
+
+        {/* Separador */}
+        <div className="my-5 flex items-center gap-3 text-xs text-slate-500">
+          <span className="h-px flex-1 bg-slate-800" />o<span className="h-px flex-1 bg-slate-800" />
+        </div>
+
+        {/* Google */}
         <button
           onClick={handleGoogle}
           disabled={loading}
           className="flex w-full items-center justify-center gap-3 rounded-xl bg-white px-4 py-3 text-base font-semibold text-slate-800 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <GoogleIcon />
-          {loading ? 'Conectando…' : 'Continuar con Google'}
+          Continuar con Google
         </button>
-
-        {error && <p className="mt-4 text-center text-sm text-rose-400">{error}</p>}
       </div>
     </div>
   )
